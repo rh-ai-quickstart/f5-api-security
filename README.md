@@ -39,6 +39,12 @@ REMEMBER: to remove this section if you don't use a TOC.
 
 This QuickStart shows how to protect AI inference endpoints on Red Hat OpenShift AI using F5 Distributed Cloud (XC) Web App & API Protection (WAAP) + API Security. You’ll deploy a KServe/vLLM model service in OpenShift AI, front it with an F5 XC HTTP Load Balancer, and enforce API discovery, OpenAPI schema validation, rate limiting, bot defense, and sensitive-data controls—without changing your ML workflow. OpenShift AI’s single-model serving is KServe-based (recommended for LLMs), and KServe’s HuggingFace/vLLM runtime exposes OpenAI-compatible endpoints, which we’ll secure via F5 XC
 
+Key Components
+
+- Red Hat OpenShift AI – Unified MLOps platform for developing and inference models at scale.
+- F5 Distributed Cloud API Security – Provides LLM-aware threat detection, schema validation, and sensitive data redaction.
+- Integration Blueprint – Demonstrates secure model inference across hybrid environments
+
 
 ### See it in action 
 
