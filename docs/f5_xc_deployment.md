@@ -18,10 +18,10 @@ This deployment supports Mesh functionalities only and was performed on the foll
 
 ---
 
-## 🏗️ Step 1: OCP Environment Configuration
+##  Step 1: OCP Environment Configuration
 This step ensures the OCP environment meets the **kernel and storage requirements** for the F5XC pod deployment.
 
-### 1.1 ✅ Verify OpenShift Cluster Readiness
+### 1.1  Verify OpenShift Cluster Readiness
 Check the cluster state:
 ```bash
 oc get nodes
@@ -38,7 +38,7 @@ oc get pod -A | egrep -vi 'Running|Completed'
 
 ---
 
-### 1.2 🧠 Enable Kernel HugePages
+### 1.2  Enable Kernel HugePages
 HugePages must be configured when deploying Mesh as OCP pods.
 
 **Steps:**
@@ -51,7 +51,7 @@ HugePages must be configured when deploying Mesh as OCP pods.
 
 ---
 
-### 1.3 💽 Validate StorageClass and PVC Functionality
+### 1.3  Validate StorageClass and PVC Functionality
 Ensure a StorageClass with **Dynamic Persistent Volume Provisioner** is available:
 ```bash
 oc get sc
@@ -65,16 +65,16 @@ lvms-vg1 (default) topolvm.io                  Delete          WaitForFirstConsu
 
 ---
 
-## 🚀 Step 2: Deploy Cloud Mesh Pod
+##  Step 2: Deploy Cloud Mesh Pod
 This step deploys the F5XC site using the **CE on K8S** manifest file.
 
-### 2.1 📥 Download Manifest
+### 2.1  Download Manifest
 Download from GitLab:  
 🔗 [volterra-ce GitLab Repository](https://gitlab.com/volterra.io/volterra-ce/-/raw/master/k8s/ce_k8s.yml)
 
 ---
 
-### 2.2 ⚙️ Update Manifest for Environment
+### 2.2  Update Manifest for Environment
 For this single-site deployment, the manifest `ce_ocp_gpu-ai.yml` was customized.  
 The standard manifest includes optional **NodePort definitions** for multi-cluster configurations, which can be safely **commented out or removed**.
 
@@ -82,7 +82,7 @@ The standard manifest includes optional **NodePort definitions** for multi-clust
 
 ---
 
-### 2.3 🧩 Apply Deployment
+### 2.3  Apply Deployment
 ```bash
 oc create -f ce_ocp_gpu-ai.yml
 ```
@@ -104,7 +104,7 @@ statefulset.apps/vp-manager created
 service/vpm created
 ```
 
-#### 🧱 PVC Verification
+####  PVC Verification
 ```bash
 oc -n ves-system get pvc
 ```
@@ -117,7 +117,7 @@ varvpm-vp-manager-0      Bound    pvc-7f89642f-c304-4ee3-b797-042304c58eef   1Gi
 
 ---
 
-### 2.4 🔐 Approve Registration on F5XC Console
+### 2.4  Approve Registration on F5XC Console
 After deployment, monitor F5XC pods:
 ```bash
 oc -n ves-system get pod -o wide
@@ -186,7 +186,7 @@ vp-manager-0                  1/1     Running   3          47m   10.128.1.212   
 
 ---
 
-## 🧱 Step 3: Deploy Application on OpenShift
+##  Step 3: Deploy Application on OpenShift
 With the F5XC site operational, deploy the **Hipster Shop** application.
 
 ### 3.1 🏗️ Install Apps
@@ -197,11 +197,11 @@ With the F5XC site operational, deploy the **Hipster Shop** application.
 
 ---
 
-## 🌍 Step 4: Advertise Services
+##  Step 4: Advertise Services
 Since the F5XC site runs as pods, **service discovery is automatic** via the kube-API.  
 Services are advertised using **Origin Pools** and **HTTP Load Balancers** in the F5XC Console.
 
-### 4.1 🧭 Create Origin Pool
+### 4.1  Create Origin Pool
 1. In F5XC Console → **Multi-Cloud App Connect**
 2. Select your namespace *(e.g., `z-ji`)*
 3. Navigate to **Manage → Load Balancers → Origin Pools**
@@ -214,7 +214,7 @@ Services are advertised using **Origin Pools** and **HTTP Load Balancers** in th
 
 ---
 
-### 4.2 🌐 Create HTTP Load Balancer
+### 4.2  Create HTTP Load Balancer
 1. Go to **Manage → Load Balancers → HTTP Load Balancers**
 2. Provide a descriptive name in **Metadata**
 3. Under **Basic Configuration**, enter the domain name
