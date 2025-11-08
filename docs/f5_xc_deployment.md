@@ -24,8 +24,6 @@ This step ensures the OCP environment meets the kernel and storage requirements 
 Verify the single node cluster state:
 ```bash
 oc get nodes
-```
-```
 NAME                STATUS   ROLES                                    AGE   VERSION
 api.gpu-ai.bd.f5.com   Ready    control-plane,master,worker,worker-hp   221d  v1.31.6
 ```
