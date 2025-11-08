@@ -126,6 +126,9 @@ List minimum hardware requirements.
 
 Note: the 70B model is NOT required for initial testing of this example. The safety/shield model `Llama-Guard-3-8B` is also optional.
 
+## Deploying the Quickstart Baseline (Step 1)
+The instructions below will deploy the core AI stack (pgvector, llm-service, llama-stack) to your OpenShift environment.
+
 ### Installation Steps
 
 #### 1. Login to OpenShift
