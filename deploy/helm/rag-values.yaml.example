@@ -298,7 +298,7 @@ ingestion-pipeline:
 replicaCount: 1
 
 image:
-  repository: "quay.io/rh-ai-quickstart/llamastack-dist-ui"
+  repository: "quay.io/rh-ai-quickstart/f5-security-rag-ui"
   pullPolicy: "Always"
 
 env:
