@@ -87,10 +87,25 @@ def render_history(tool_debug):
 def tool_chat_page():
     st.title("💬 Chat")
 
-    client = llama_stack_api.client
-    models = client.models.list()
-    model_list = [model.identifier for model in models if model.api_model_type == "llm"]
+    # Get models from XC URL if configured, otherwise use default endpoint
+    def get_available_models():
+        # Check if XC URL is configured in session state
+        if "xc_url" in st.session_state and "models_list" in st.session_state and st.session_state["models_list"]:
+            # Use models from XC URL (same as Models tab)
+            models_list = st.session_state["models_list"]
+            # Filter to only LLM models
+            llm_models = [model for model in models_list if hasattr(model, 'api_model_type') and model.api_model_type == "llm"]
+            return [model.identifier for model in llm_models]
+        else:
+            # Fallback to default endpoint
+            client = llama_stack_api.client
+            models = client.models.list()
+            return [model.identifier for model in models if model.api_model_type == "llm"]
+    
+    model_list = get_available_models()
 
+    # Use appropriate client for toolgroups (default endpoint for now)
+    client = llama_stack_api.client
     tool_groups = client.toolgroups.list()
     tool_groups_list = [tool_group.identifier for tool_group in tool_groups]
     mcp_tools_list = [tool for tool in tool_groups_list if tool.startswith("mcp::")]
