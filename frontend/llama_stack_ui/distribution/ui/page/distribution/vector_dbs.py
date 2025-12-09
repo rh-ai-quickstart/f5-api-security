@@ -64,21 +64,17 @@ def vector_dbs():
         dropdown_options.extend(list(existing_vdbs.keys()))
         vdb_info = existing_vdbs
     
-    # Determine the default selection index based on session state (for persistence)
-    default_index = 0  # Default to empty string
-    
+    # Sync session state for widget - ensure it shows the right value
     # Priority 1: If a database was just created, auto-select it (highest priority)
     if st.session_state["newly_created_vdb"]:
         newly_created_name = st.session_state["newly_created_vdb"]
         if newly_created_name in dropdown_options:
-            default_index = dropdown_options.index(newly_created_name)
             # Update both session variables to sync state
             st.session_state["selected_vector_db"] = newly_created_name
             st.session_state["vector_db_selector"] = newly_created_name
             st.session_state["newly_created_vdb"] = None
     # Priority 2: Use the previously selected database from session if it still exists
     elif st.session_state["selected_vector_db"] and st.session_state["selected_vector_db"] in dropdown_options:
-        default_index = dropdown_options.index(st.session_state["selected_vector_db"])
         # Sync widget state with our tracked state
         st.session_state["vector_db_selector"] = st.session_state["selected_vector_db"]
     # Priority 3: If previously selected DB no longer exists, reset to empty
@@ -86,19 +82,17 @@ def vector_dbs():
         st.warning(f"⚠️ Previously selected database '{st.session_state['selected_vector_db']}' no longer exists. Resetting selection.")
         st.session_state["selected_vector_db"] = ""
         st.session_state["vector_db_selector"] = ""
-        default_index = 0
     
     # Vector database selection dropdown with persistent selection
-    # Using key parameter to bind directly to session state for true persistence
+    # Using key parameter to bind directly to session state - NO index parameter to avoid conflicts
     def on_vector_db_change():
         """Callback to update session state when selection changes"""
         st.session_state["selected_vector_db"] = st.session_state["vector_db_selector"]
     
     selected_vector_db = st.selectbox(
         "Select a vector database", 
-        dropdown_options, 
-        index=default_index,
-        key="vector_db_selector",  # Key binds to session state
+        dropdown_options,
+        key="vector_db_selector",  # Key binds to session state (session state controls the value)
         on_change=on_vector_db_change,  # Callback updates our tracking variable
         help="Your selection will be remembered when you navigate to other pages"
     )
