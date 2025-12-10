@@ -104,8 +104,15 @@ def tool_chat_page():
     
     model_list = get_available_models()
 
-    # Use appropriate client for toolgroups (default endpoint for now)
-    client = llama_stack_api.client
+    # Determine which client to use based on XC URL configuration
+    if "xc_url" in st.session_state and st.session_state.get("xc_url"):
+        # Use XC URL client for all operations
+        xc_url = st.session_state["xc_url"]
+        client = llama_stack_api.create_client_with_url(xc_url)
+    else:
+        # Use default endpoint client
+        client = llama_stack_api.client
+    
     tool_groups = client.toolgroups.list()
     tool_groups_list = [tool_group.identifier for tool_group in tool_groups]
     mcp_tools_list = [tool for tool in tool_groups_list if tool.startswith("mcp::")]
@@ -129,7 +136,7 @@ def tool_chat_page():
         toolgroup_selection = ["builtin::rag"]
         
         # Document Collections selection - single, clean selector
-        vector_dbs = llama_stack_api.client.vector_dbs.list() or []
+        vector_dbs = client.vector_dbs.list() or []
         if not vector_dbs:
             st.info("No vector databases available for selection.")
         vector_db_names = [get_vector_db_name(vector_db) for vector_db in vector_dbs]
@@ -514,14 +521,14 @@ def tool_chat_page():
         st.session_state.messages.append({"role": "assistant", "content": response_content})
 
 
-    def direct_process_prompt(prompt, debug_events_list):
+    def direct_process_prompt(prompt, debug_events_list, inference_client):
         # Query the vector DB
         if selected_vector_dbs:
-            vector_dbs = llama_stack_api.client.vector_dbs.list() or []
+            vector_dbs = client.vector_dbs.list() or []
             vector_db_ids = [vector_db.identifier for vector_db in vector_dbs if get_vector_db_name(vector_db) in selected_vector_dbs]
             with st.spinner("Retrieving context (RAG)..."):
                 try:
-                    rag_response = llama_stack_api.client.tool_runtime.rag_tool.query(
+                    rag_response = client.tool_runtime.rag_tool.query(
                         content=prompt, vector_db_ids=list(vector_db_ids)
                     )
                     prompt_context = rag_response.content
@@ -548,13 +555,13 @@ def tool_chat_page():
             else:
                 extended_prompt = f"Please answer the following query. \n\nQUERY:\n{prompt}"
 
-            # Run inference directly
+            # Run inference directly using the configured client (XC URL or default)
             #st.session_state.messages.append({"role": "user", "content": extended_prompt})
             messages_for_direct_api = (
                 [{'role': 'system', 'content': system_prompt}] +
                 [{'role': 'user', 'content': extended_prompt}]
             )
-            response = llama_stack_api.client.inference.chat_completion(
+            response = inference_client.inference.chat_completion(
                 messages=messages_for_direct_api,
                 model_id=model,
                 sampling_params={
@@ -600,7 +607,7 @@ def tool_chat_page():
         
         # Process the prompt based on mode (Direct is hardcoded)
         if processing_mode == "Direct":
-            direct_process_prompt(prompt, current_turn_debug_events_list)
+            direct_process_prompt(prompt, current_turn_debug_events_list, client)
         
     # Handle selected question from suggestions
     if st.session_state.selected_question:
