@@ -502,6 +502,22 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
         else:
             vector_db_id = vector_db_name  # Fallback to display name
         
+        # Initialize session state for deletion status
+        if "delete_status" not in st.session_state:
+            st.session_state["delete_status"] = None
+        if "delete_message" not in st.session_state:
+            st.session_state["delete_message"] = ""
+        
+        # Show deletion status messages (before checking documents, so last delete shows)
+        if st.session_state["delete_status"] == "success":
+            st.success(st.session_state["delete_message"])
+            st.session_state["delete_status"] = None
+            st.session_state["delete_message"] = ""
+        elif st.session_state["delete_status"] == "error":
+            st.error(st.session_state["delete_message"])
+            st.session_state["delete_status"] = None
+            st.session_state["delete_message"] = ""
+        
         with st.spinner("Checking for documents..."):
             # First, try to get document list from pgvector directly
             document_ids = _get_documents_from_pgvector(vector_db_id)
@@ -513,22 +529,6 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                 
                 # Display documents in a table with delete buttons
                 import pandas as pd
-                
-                # Initialize session state for deletion status
-                if "delete_status" not in st.session_state:
-                    st.session_state["delete_status"] = None
-                if "delete_message" not in st.session_state:
-                    st.session_state["delete_message"] = ""
-                
-                # Show deletion status messages
-                if st.session_state["delete_status"] == "success":
-                    st.success(st.session_state["delete_message"])
-                    st.session_state["delete_status"] = None
-                    st.session_state["delete_message"] = ""
-                elif st.session_state["delete_status"] == "error":
-                    st.error(st.session_state["delete_message"])
-                    st.session_state["delete_status"] = None
-                    st.session_state["delete_message"] = ""
                 
                 # Display table header
                 col1, col2, col3 = st.columns([0.5, 5, 0.5])
