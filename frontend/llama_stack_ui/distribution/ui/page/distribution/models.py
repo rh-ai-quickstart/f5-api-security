@@ -58,8 +58,6 @@ def models():
         st.session_state["previous_xc_url"] = st.session_state["xc_url"]
 
     # XC URL input field
-    st.subheader("LlamaStack Configuration")
-    
     xc_url = st.text_input(
         "XC URL",
         value=st.session_state["xc_url"],

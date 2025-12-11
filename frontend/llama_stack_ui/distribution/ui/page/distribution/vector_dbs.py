@@ -54,15 +54,19 @@ def vector_dbs():
     # Fetch all vector databases
     vdb_list = llama_stack_api.client.vector_dbs.list()
     
-    # Build dropdown options - empty string first (default), then "Create New", then existing DBs  
-    dropdown_options = ["", "Create New"]
+    # Build dropdown options based on whether databases exist
+    dropdown_options = []
     vdb_info = {}
     
     if vdb_list:
-        # Add existing vector databases to dropdown
+        # When databases exist: list actual DBs first, then "Create New" LAST
         existing_vdbs = {get_vector_db_name(v): v.to_dict() for v in vdb_list}
         dropdown_options.extend(list(existing_vdbs.keys()))
+        dropdown_options.append("Create New")  # Add "Create New" as LAST item
         vdb_info = existing_vdbs
+    else:
+        # When NO databases exist: only show "Create New"
+        dropdown_options = ["Create New"]
     
     # Sync session state for widget - ensure it shows the right value
     # Priority 1: If a database was just created, auto-select it (highest priority)
@@ -77,11 +81,17 @@ def vector_dbs():
     elif st.session_state["selected_vector_db"] and st.session_state["selected_vector_db"] in dropdown_options:
         # Sync widget state with our tracked state
         st.session_state["vector_db_selector"] = st.session_state["selected_vector_db"]
-    # Priority 3: If previously selected DB no longer exists, reset to empty
-    elif st.session_state["selected_vector_db"] and st.session_state["selected_vector_db"] not in dropdown_options:
-        st.warning(f"⚠️ Previously selected database '{st.session_state['selected_vector_db']}' no longer exists. Resetting selection.")
-        st.session_state["selected_vector_db"] = ""
-        st.session_state["vector_db_selector"] = ""
+    # Priority 3: If no saved selection or saved selection doesn't exist, use smart default
+    else:
+        if vdb_list:
+            # When databases exist: default to FIRST actual database (not "Create New")
+            first_db = dropdown_options[0]  # First item is first actual database
+            st.session_state["selected_vector_db"] = first_db
+            st.session_state["vector_db_selector"] = first_db
+        else:
+            # When NO databases exist: default to "Create New"
+            st.session_state["selected_vector_db"] = "Create New"
+            st.session_state["vector_db_selector"] = "Create New"
     
     # Vector database selection dropdown with persistent selection
     # Using key parameter to bind directly to session state - NO index parameter to avoid conflicts
@@ -103,7 +113,7 @@ def vector_dbs():
     
     # Get the actual vector database object for API calls (do this before using it)
     selected_vdb_obj = None
-    if selected_vector_db and selected_vector_db != "" and selected_vector_db != "Create New":
+    if selected_vector_db and selected_vector_db != "Create New":
         for vdb in vdb_list:
             if get_vector_db_name(vdb) == selected_vector_db:
                 selected_vdb_obj = vdb
@@ -112,9 +122,8 @@ def vector_dbs():
     if selected_vector_db == "Create New":
         # Show vector database creation UI
         _show_create_vector_db_ui()
-    elif selected_vector_db and selected_vector_db != "":
-        # Show existing documents in the database
-        st.subheader(f"📄 Documents in '{selected_vector_db}'")
+    elif selected_vector_db and selected_vector_db != "Create New":
+        # Show existing documents in the database (heading will show only if documents exist)
         _show_existing_documents_table(selected_vector_db, selected_vdb_obj)
         
         # Add Browse functionality for uploading documents to this database
@@ -408,6 +417,76 @@ def _get_documents_from_pgvector(vector_db_id):
         return None
 
 
+def _delete_document_from_pgvector(vector_db_id, filename):
+    """
+    Delete a document and all its chunks/embeddings from pgvector.
+    
+    Args:
+        vector_db_id (str): The vector database identifier
+        filename (str): The filename/source to delete
+        
+    Returns:
+        tuple: (success: bool, deleted_count: int, error_message: str)
+    """
+    try:
+        import asyncpg
+        import asyncio
+        
+        # Get pgvector connection details from environment or defaults
+        pg_host = os.environ.get("PGVECTOR_HOST", "pgvector")
+        pg_port = os.environ.get("PGVECTOR_PORT", "5432")
+        pg_user = os.environ.get("PGVECTOR_USER", "postgres")
+        pg_password = os.environ.get("PGVECTOR_PASSWORD", "rag_password")
+        pg_database = os.environ.get("PGVECTOR_DB", "rag_blueprint")
+        
+        async def delete_document():
+            try:
+                # Connect to PostgreSQL
+                conn = await asyncpg.connect(
+                    host=pg_host,
+                    port=pg_port,
+                    user=pg_user,
+                    password=pg_password,
+                    database=pg_database
+                )
+                
+                # The vector_db_id is used as the table name with underscores replacing hyphens
+                table_name = f"vs_{vector_db_id.replace('-', '_')}"
+                
+                # Delete all chunks where the source matches the filename
+                query = f"""
+                    DELETE FROM {table_name}
+                    WHERE document->'chunk_metadata'->>'source' = $1
+                """
+                
+                result = await conn.execute(query, filename)
+                
+                await conn.close()
+                
+                # Parse the result to get the number of deleted rows
+                # Result format is like "DELETE 5" where 5 is the number of rows
+                deleted_count = int(result.split()[-1]) if result else 0
+                
+                return True, deleted_count, None
+                
+            except Exception as e:
+                return False, 0, str(e)
+        
+        # Run the async function
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        return loop.run_until_complete(delete_document())
+        
+    except ImportError:
+        return False, 0, "asyncpg module not available"
+    except Exception as e:
+        return False, 0, str(e)
+
+
 def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
     """
     Display information about documents in the selected vector database.
@@ -429,18 +508,67 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
             
             if document_ids:
                 # Success! We have the actual document filenames
-                # Display documents in a table with better formatting
+                # Show heading for documents section
+                st.subheader(f"📄 Documents in '{vector_db_name}'")
+                
+                # Display documents in a table with delete buttons
                 import pandas as pd
                 
-                # Create simple table with filenames
-                doc_info = [{'Filename': doc_id} for doc_id in document_ids]
+                # Initialize session state for deletion status
+                if "delete_status" not in st.session_state:
+                    st.session_state["delete_status"] = None
+                if "delete_message" not in st.session_state:
+                    st.session_state["delete_message"] = ""
                 
-                df = pd.DataFrame(doc_info)
-                # Set index to start at 1 instead of 0
-                df.index = df.index + 1
+                # Show deletion status messages
+                if st.session_state["delete_status"] == "success":
+                    st.success(st.session_state["delete_message"])
+                    st.session_state["delete_status"] = None
+                    st.session_state["delete_message"] = ""
+                elif st.session_state["delete_status"] == "error":
+                    st.error(st.session_state["delete_message"])
+                    st.session_state["delete_status"] = None
+                    st.session_state["delete_message"] = ""
                 
-                # Show the table
-                st.dataframe(df, use_container_width=True)
+                # Display table header
+                col1, col2, col3 = st.columns([0.5, 5, 0.5])
+                with col1:
+                    st.markdown("**#**")
+                with col2:
+                    st.markdown("**Filename**")
+                with col3:
+                    st.markdown("**Del**")
+                
+                st.divider()
+                
+                # Display each document in a row with delete button
+                for idx, doc_id in enumerate(document_ids, start=1):
+                    col1, col2, col3 = st.columns([0.5, 5, 0.5])
+                    
+                    with col1:
+                        st.write(idx)
+                    
+                    with col2:
+                        st.write(doc_id)
+                    
+                    with col3:
+                        delete_key = f"delete_{vector_db_name}_{doc_id}_{idx}"
+                        
+                        if st.button("✕", key=delete_key, help=f"Delete {doc_id}"):
+                            # Delete immediately without confirmation
+                            success, deleted_count, error = _delete_document_from_pgvector(
+                                vector_db_id,
+                                doc_id
+                            )
+                            
+                            if success:
+                                st.session_state["delete_status"] = "success"
+                                st.session_state["delete_message"] = f"✅ Successfully deleted '{doc_id}' ({deleted_count} chunk(s) removed)"
+                            else:
+                                st.session_state["delete_status"] = "error"
+                                st.session_state["delete_message"] = f"❌ Failed to delete '{doc_id}': {error}"
+                            
+                            st.rerun()
                 
             else:
                 # Fallback: Try a simple query to see if documents exist
@@ -455,6 +583,9 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                     
                     if has_content:
                         content_length = len(str(rag_response.content))
+                        
+                        # Show heading for documents section
+                        st.subheader(f"📄 Documents in '{vector_db_name}'")
                         
                         # Show that documents exist
                         st.success(f"✅ Documents are present in this vector database")
@@ -500,9 +631,7 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                                     st.info("No content found for this query")
                             except Exception as e:
                                 st.error(f"Query error: {str(e)}")
-                    else:
-                        st.info("📭 This vector database appears to be empty")
-                        st.write("Upload documents using the section below to get started.")
+                    # else: Database is empty - no need to show obvious message, upload section is below
                         
                 except Exception as e:
                     st.error(f"Error checking database: {str(e)}")

@@ -136,7 +136,8 @@ def tool_chat_page():
         toolgroup_selection = ["builtin::rag"]
         
         # Document Collections selection - single, clean selector
-        vector_dbs = client.vector_dbs.list() or []
+        # Always fetch vector DBs from local endpoint (pgvector is local, not on XC)
+        vector_dbs = llama_stack_api.client.vector_dbs.list() or []
         if not vector_dbs:
             st.info("No vector databases available for selection.")
         vector_db_names = [get_vector_db_name(vector_db) for vector_db in vector_dbs]
