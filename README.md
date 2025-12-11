@@ -61,12 +61,12 @@ Key Components
 1. **Clone the repository**:
 ```bash
 git clone https://github.com/rh-ai-quickstart/F5-API-Security.git
-cd F5-API-Security/deploy
+cd F5-API-Security/deploy/helm
 ```
 
 2. **Deploy the application**:
 ```bash
-./deploy.sh <namespace>
+make install NAMESPACE=<namespace>
 ```
 
 3. **Access and configure**:
@@ -192,55 +192,55 @@ git clone https://github.com/rh-ai-quickstart/F5-API-Security
 
 #### 3. Navigate to Deployment Directory
 
-Change into the cloned repository and then into the `deploy` folder:
+Change into the cloned repository and then into the `deploy/helm` folder:
 
 ```bash
 cd F5-API-Security
-cd deploy
+cd deploy/helm
 ```
 
-> The deployment process navigated to `~/F5-API-Security/deploy`.
+> The deployment process navigated to `~/F5-API-Security/deploy/helm`.
 
 ---
 
 #### 4. Configure and Deploy
 
-Execute the deployment script:
+First, configure your deployment values:
 
 ```bash
-./deploy.sh [namespace]
+# Copy the example configuration file
+cp rag-values.yaml.example rag-values.yaml
+
+# Edit the configuration file to set your values
+vim rag-values.yaml  # or use your preferred editor
 ```
 
-If the configuration file is missing, the script creates one and prompts you to edit it:
-
-```
-Values file not found. Copying from example...
-Created /Users/<user>/F5-API-Security/deploy/f5-ai-security-values.yaml
-Please edit this file to configure your deployment (API keys, model selection, etc.)
-```
-
-After editing `f5-ai-security-values.yaml`, re-run the script:
+Then deploy using the Makefile:
 
 ```bash
-./deploy.sh [namespace]
+make install NAMESPACE=f5-ai-security
 ```
 
-During installation, the script:
+During installation, the make command:
+- Checks required dependencies (helm, oc).
+- Creates the namespace if it doesn't exist.
 - Updates Helm dependencies.
-- Downloads required charts (`pgvector`, `llm-service`, `llama-stack`).
-- Creates the OpenShift project `f5-ai-security`.
-- Installs the Helm chart with custom values.
+- Downloads required charts (`pgvector`, `llama-stack`).
+- Installs the Helm chart with your custom values from `rag-values.yaml`.
 
 A successful deployment will show:
 
 ```
-NAME: f5-ai-security
-LAST DEPLOYED: Thu Nov 6 12:27:49 2025
+[SUCCESS] All dependencies are installed.
+[INFO] Creating namespace f5-ai-security...
+[SUCCESS] Namespace f5-ai-security is ready
+[INFO] Installing rag helm chart with rag-values.yaml...
+NAME: rag
+LAST DEPLOYED: Thu Dec 11 10:38:36 2025
 NAMESPACE: f5-ai-security
 STATUS: deployed
 REVISION: 1
-TEST SUITE: None
-Deployment complete!
+[SUCCESS] rag installed successfully
 ```
 
 ---
@@ -314,13 +314,40 @@ Run security testing to demonstrate how F5 API Security protects the deployed mo
 
 ## Delete
 
-<!-- CONTRIBUTOR TODO: add uninstall instructions
+To completely remove the F5-API-Security application from your OpenShift cluster:
 
-*Section required. Include explicit steps to cleanup quickstart.*
+### Uninstall the Application
 
-Some users may need to reclaim space by removing this quickstart. Make it easy.
+```bash
+cd F5-API-Security/deploy/helm
+make uninstall NAMESPACE=f5-ai-security
+```
 
--->
+This will:
+- Uninstall the Helm release
+- Delete all pods, services, and routes
+- Remove the pgvector PVC (persistent volume claim)
+- Clean up all resources in the namespace
+
+### Complete Cleanup (Optional)
+
+If you also want to delete the namespace itself:
+
+```bash
+oc delete project f5-ai-security
+```
+
+### Available Make Commands
+
+```bash
+make help              # Show all available commands
+make install           # Deploy the application
+make uninstall         # Remove the application
+make clean             # Clean up all resources including namespace
+make logs              # Show logs for all pods
+make monitor           # Monitor deployment status
+make validate-config   # Validate configuration values
+```
 
 ## References 
 
