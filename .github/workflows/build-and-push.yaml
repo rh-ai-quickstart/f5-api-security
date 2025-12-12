@@ -10,12 +10,6 @@ jobs:
   build-and-push:
     if: github.repository == 'rh-ai-quickstart/F5-API-Security'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - name: f5-security-ui
-            context: frontend
-            chart: deploy/helm/rag/Chart.yaml
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,17 +27,17 @@ jobs:
       - name: Extract version from Chart.yaml
         id: version
         run: |
-          f5_version=$(grep '^version:' ${{ matrix.chart }} | awk '{print $2}')
+          f5_version=$(grep '^version:' deploy/helm/rag/Chart.yaml | awk '{print $2}')
           echo "f5_tag=$f5_version" >> $GITHUB_OUTPUT
 
-      - name: Build and push ${{ matrix.name }}
+      - name: Build and push f5-security-ui
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Containerfile
+          context: frontend
+          file: frontend/Containerfile
           push: true
           tags: |
-            quay.io/rh-ai-quickstart/${{ matrix.name }}:${{ steps.version.outputs.f5_tag }}
-            quay.io/rh-ai-quickstart/${{ matrix.name }}:latest
+            quay.io/rh-ai-quickstart/f5-security-ui:${{ steps.version.outputs.f5_tag }}
+            quay.io/rh-ai-quickstart/f5-security-ui:latest
           build-args: |
             IMAGE_TAG=0.2.23
