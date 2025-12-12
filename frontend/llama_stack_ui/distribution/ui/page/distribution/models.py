@@ -4,6 +4,7 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
+import pandas as pd
 import streamlit as st
 
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
@@ -129,8 +130,6 @@ def models():
         return
 
     # Display models in a table with single column
-    import pandas as pd
-    
     # Create DataFrame with model identifiers
     models_data = [{"Model Identifier": model.identifier} for model in llm_models]
     df = pd.DataFrame(models_data)

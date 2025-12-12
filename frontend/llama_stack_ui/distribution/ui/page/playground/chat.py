@@ -7,6 +7,7 @@
 import enum
 import json
 import uuid
+from itertools import tee
 
 import streamlit as st
 from llama_stack_client.lib.agents.agent import Agent
@@ -479,7 +480,6 @@ def tool_chat_page():
 
         # Use itertools.tee to duplicate the stream for UI and debug logging
         # This is crucial because a generator can only be consumed once.
-        from itertools import tee
         ui_stream, debug_log_stream = tee(turn_response, 2)
 
         for response in ui_stream:

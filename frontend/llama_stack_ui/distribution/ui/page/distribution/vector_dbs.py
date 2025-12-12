@@ -4,10 +4,14 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
-from llama_stack_ui.distribution.ui.modules.utils import get_vector_db_name, data_url_from_file
-import streamlit as st
+import asyncio
+import asyncpg
 import os
+import pandas as pd
+import streamlit as st
+import traceback
 
+from llama_stack_ui.distribution.ui.modules.utils import get_vector_db_name, data_url_from_file
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
 from llama_stack_client import RAGDocument
 
@@ -344,9 +348,6 @@ def _get_documents_from_pgvector(vector_db_id):
         list: List of unique document IDs, or None if query fails
     """
     try:
-        import asyncpg
-        import asyncio
-        
         # Get pgvector connection details from environment or defaults
         pg_host = os.environ.get("PGVECTOR_HOST", "pgvector")
         pg_port = os.environ.get("PGVECTOR_PORT", "5432")
@@ -429,9 +430,6 @@ def _delete_document_from_pgvector(vector_db_id, filename):
         tuple: (success: bool, deleted_count: int, error_message: str)
     """
     try:
-        import asyncpg
-        import asyncio
-        
         # Get pgvector connection details from environment or defaults
         pg_host = os.environ.get("PGVECTOR_HOST", "pgvector")
         pg_port = os.environ.get("PGVECTOR_PORT", "5432")
@@ -528,8 +526,6 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                 st.subheader(f"📄 Documents in '{vector_db_name}'")
                 
                 # Display documents in a table with delete buttons
-                import pandas as pd
-                
                 # Display table header
                 col1, col2, col3 = st.columns([0.5, 5, 0.5])
                 with col1:
@@ -639,6 +635,5 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                 
     except Exception as e:
         st.error(f"Error loading document information: {str(e)}")
-        import traceback
         with st.expander("Error Details"):
             st.code(traceback.format_exc())
