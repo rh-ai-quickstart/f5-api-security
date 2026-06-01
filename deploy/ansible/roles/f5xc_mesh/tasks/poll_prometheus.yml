@@ -25,7 +25,7 @@
         WAITING FOR SITE APPROVAL — Manual action required
       ══════════════════════════════════════════════════════════════════
 
-        1. Open https://console.ves.volterra.io
+        1. Open https://{{ f5xc_tenant | default('console') }}.console.ves.volterra.io
         2. Navigate to:
            Multi-Cloud Network Connect → Manage → Site Management → Registrations
         3. Find site '{{ f5xc_cluster_name }}' and click APPROVE
@@ -35,7 +35,23 @@
         Poll attempt      : {{ poll_attempt }} of {{ poll_max_attempts }} (retrying every 30s, ~{{ (poll_max_attempts | int * 30 / 60) | int }} min timeout)
 
       ══════════════════════════════════════════════════════════════════
-  when: prom_deploy.resources | length == 0
+  when:
+    - prom_deploy.resources | length == 0
+    - not (f5xc_site_approved | default(false))
+
+- name: "Waiting for Prometheus deployment ({{ poll_attempt }}/{{ poll_max_attempts }})"
+  ansible.builtin.debug:
+    msg: |-
+
+      Site '{{ f5xc_cluster_name }}' approved via API — waiting for Prometheus deployment.
+
+        Prometheus status : {{ 'FOUND — continuing...' if prom_deploy.resources | length > 0 else 'Not yet deployed' }}
+        Current pods      : {{ poll_pods.resources | map(attribute='metadata.name') | list | join(', ') }}
+        Poll attempt      : {{ poll_attempt }} of {{ poll_max_attempts }}
+
+  when:
+    - prom_deploy.resources | length == 0
+    - f5xc_site_approved | default(false)
 
 - name: "Prometheus deployment found"
   ansible.builtin.debug:

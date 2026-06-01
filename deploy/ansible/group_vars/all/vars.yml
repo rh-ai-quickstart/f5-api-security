@@ -5,7 +5,7 @@ ocp_node_name: ""
 hugepages_role_label: "worker-hp"
 
 # --- F5 XC CE Mesh Configuration ---
-# f5xc_cluster_name and f5xc_token are in secrets.yml (see secrets.yml.example)
+# f5xc_cluster_name, f5xc_token, and f5xc_api_token are in secrets.yml (f5xc_tenant optional; see secrets.yml.example)
 f5xc_namespace: "ves-system"
 f5xc_latitude: "44"
 f5xc_longitude: "-122"
