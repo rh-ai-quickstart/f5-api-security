@@ -71,6 +71,10 @@
   ansible.builtin.debug:
     msg: "vp-manager: {{ vpm_pods.resources[0].status.phase }}"
 
+- name: Approve site registration via F5 XC API
+  ansible.builtin.include_tasks: approve_registration.yml
+  when: f5xc_auto_approve | bool
+
 - name: Registration reminder
   ansible.builtin.debug:
     msg: |-
@@ -79,16 +83,20 @@
         ACTION REQUIRED — Approve site in F5 XC Console
       ══════════════════════════════════════════════════════════════════
 
-        1. Open https://console.ves.volterra.io
+        1. Open https://{{ f5xc_tenant | default('console') }}.console.ves.volterra.io
         2. Navigate to:
            Multi-Cloud Network Connect → Manage → Site Management → Registrations
         3. Find site '{{ f5xc_cluster_name }}' and click APPROVE
 
         The playbook will poll for site approval (timeout: {{ (site_approval_timeout | int / 60) | int }} minutes).
 
+        To approve automatically, set f5xc_auto_approve: true and add f5xc_api_token to secrets.yml.
+
       ══════════════════════════════════════════════════════════════════
+  when: not (f5xc_auto_approve | bool)
 
 - name: Show current ves-system pods while waiting
+  when: not (f5xc_auto_approve | bool)
   kubernetes.core.k8s_info:
     kind: Pod
     namespace: "{{ f5xc_namespace }}"
@@ -100,6 +108,7 @@
   loop: "{{ current_pods.resources }}"
   loop_control:
     label: "{{ item.metadata.name }}"
+  when: not (f5xc_auto_approve | bool)
 
 - name: Set polling variables
   ansible.builtin.set_fact:

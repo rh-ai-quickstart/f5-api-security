@@ -501,7 +501,8 @@ f5-deploy: ## Deploy F5 XC Customer Edge mesh via Ansible
 		echo -e "  cp $(ANSIBLE_DIR)/group_vars/all/secrets.yml.example \\"; \
 		echo -e "     $(ANSIBLE_DIR)/group_vars/all/secrets.yml"; \
 		echo -e ""; \
-		echo -e "Then set $(BLUE)f5xc_token$(NC) and $(BLUE)f5xc_cluster_name$(NC) before re-running."; \
+		echo -e "Then set $(BLUE)f5xc_api_token$(NC), $(BLUE)f5xc_token$(NC), and $(BLUE)f5xc_cluster_name$(NC) before re-running."; \
+		echo -e "$(BLUE)f5xc_tenant$(NC) is optional (auto-discovered from API token)."; \
 		exit 1; \
 	fi
 	@echo -e "$(BLUE)[INFO]$(NC) Installing Ansible collection dependencies..."

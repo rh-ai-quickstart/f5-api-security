@@ -206,9 +206,29 @@ varvpm-vp-manager-0      Bound    pvc-7f89642f-c304-4ee3-b797-042304c58eef   1Gi
 
 ---
 
-### 2.4 Approve registration on F5 XC Console
+### 2.4 Approve site registration
 
-Log into the F5 XC Console to accept the site registration.
+**Automatic (default):** When `make f5-deploy` runs with `f5xc_auto_approve: true` (default), the Ansible role calls the F5 XC Console API to approve the pending registration and waits until the site state is **ONLINE**. Configure these in `deploy/ansible/group_vars/all/secrets.yml`:
+
+| Variable | Source |
+|----------|--------|
+| `f5xc_api_token` | Console → **Administration → Credentials → API Token** (required) |
+| `f5xc_cluster_name` | Must match the CE site name (same as manual flow) |
+| `f5xc_tenant` | Optional override for tenant subdomain (auto-discovered if omitted) |
+
+Tenant discovery (when `f5xc_tenant` is not set): probes `https://console.ves.volterra.io` with your API token (follows redirects), then JWT claims, then optional `F5XC_TENANT` env var.
+
+Verify the API token (after tenant is known or set):
+
+```bash
+TENANT="<your-tenant>"   # optional if using global console probe
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: APIToken <your-api-token>" \
+  "https://${TENANT}.console.ves.volterra.io/api/register/namespaces/system/registrations"
+# Expected: 200
+```
+
+**Manual:** Set `f5xc_auto_approve: false` in `deploy/ansible/group_vars/all/vars.yml`, then log into the F5 XC Console to accept the site registration.
 
 After deployment, monitor F5 XC pods:
 

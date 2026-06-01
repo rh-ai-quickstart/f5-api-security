@@ -199,18 +199,20 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
    This step deploys the F5 XC CE mesh onto the OpenShift cluster. It configures HugePages, validates storage, applies the CE manifest, and waits for all pods to register and become healthy.
 
    ```bash
-   # Create the secrets file with your F5 XC site token and site name
+   # Create the secrets file with F5 XC credentials
    cp deploy/ansible/group_vars/all/secrets.yml.example \
       deploy/ansible/group_vars/all/secrets.yml
 
-   # Edit secrets.yml — set f5xc_token and f5xc_cluster_name
+   # Edit secrets.yml — set f5xc_api_token, f5xc_token, and f5xc_cluster_name (f5xc_tenant is optional)
    vim deploy/ansible/group_vars/all/secrets.yml
 
    # Run the deployment
    make f5-deploy
    ```
 
-   > **Manual step required:** During deployment, the playbook will pause and display a banner asking you to approve the site in the F5 XC Console. Navigate to **Multi-Cloud Network Connect → Manage → Site Management → Registrations**, find your site, and click **Approve**. The playbook detects the approval automatically and continues.
+   By default (`f5xc_auto_approve: true`), the playbook approves the CE site registration via the F5 XC API using `f5xc_api_token` (Console: **Administration → Credentials → API Token**). Your tenant subdomain is resolved automatically from the API token; override with `f5xc_tenant` in `secrets.yml` or `F5XC_TENANT` if needed. The playbook polls until the site reaches **ONLINE**, then continues with CE pod health checks.
+
+   To approve manually in the Console instead, set `f5xc_auto_approve: false` in `deploy/ansible/group_vars/all/vars.yml`. The playbook will display a banner and poll until approval is detected.
 
 6. **Next steps**
    - [Security Use Cases and Testing](docs/securing_model_inference_use_cases.md)

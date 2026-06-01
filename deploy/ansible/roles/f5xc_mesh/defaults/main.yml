@@ -1,2 +1,11 @@
 ---
 f5xc_manifest_source: "template"
+
+# Approve CE site registration via F5 XC Console API (requires f5xc_api_token in secrets.yml)
+# Tenant subdomain is auto-discovered; optionally set f5xc_tenant or export F5XC_TENANT
+f5xc_auto_approve: true
+f5xc_registration_poll_interval: 30
+
+f5xc_cluster_size: 1
+f5xc_cluster_type: "ce"
+f5xc_tunnel_type: "SITE_TO_SITE_TUNNEL_IPSEC_OR_SSL"

@@ -1,0 +1,173 @@
+---
+- name: Validate F5 XC API credentials for auto-approval
+  ansible.builtin.assert:
+    that:
+      - f5xc_api_token | default('') | length > 0
+      - f5xc_api_token != 'CHANGEME'
+    fail_msg: >-
+      Set f5xc_api_token in deploy/ansible/group_vars/all/secrets.yml.
+      Create an API token in F5 XC Console: Administration → Credentials → API Token.
+
+- name: Discover F5 XC tenant (optional override via f5xc_tenant or F5XC_TENANT)
+  ansible.builtin.include_tasks: discover_tenant.yml
+
+- name: Set F5 XC API request headers
+  ansible.builtin.set_fact:
+    f5xc_api_headers:
+      Authorization: "APIToken {{ f5xc_api_token }}"
+      Content-Type: application/json"
+
+- name: Verify F5 XC API token
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registrations"
+    method: GET
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    status_code: 200
+  register: f5xc_api_verify
+
+- name: Confirm API returned registration data
+  ansible.builtin.assert:
+    that:
+      - f5xc_api_verify.json is defined
+      - f5xc_api_verify.json['items'] is defined
+    fail_msg: >-
+      F5 XC API token check failed for {{ f5xc_console_base }}.
+      Use the console login subdomain in f5xc_tenant (often without the -ymwyotjx suffix).
+
+- name: Check for existing registration by site name
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registrations_by_site/{{ f5xc_cluster_name }}"
+    method: GET
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    status_code: [200, 404]
+  register: f5xc_site_lookup
+
+- name: Use registration from site lookup when present
+  ansible.builtin.set_fact:
+    f5xc_reg_name: "{{ (f5xc_site_lookup.json['items'] | default([]))[0].name }}"
+  when: (f5xc_site_lookup.json['items'] | default([]) | length) > 0
+
+- name: Get registration detail when name is known
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registrations/{{ f5xc_reg_name }}"
+    method: GET
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    status_code: 200
+  register: f5xc_reg_detail
+  when: f5xc_reg_name is defined
+
+- name: Record registration state from detail
+  ansible.builtin.set_fact:
+    f5xc_reg_current_state: "{{ f5xc_reg_detail.json.object.status.current_state | default('') }}"
+  when: f5xc_reg_detail is not skipped
+
+- name: Site registration already online
+  ansible.builtin.debug:
+    msg: "Site '{{ f5xc_cluster_name }}' ({{ f5xc_reg_name }}) is already {{ f5xc_reg_current_state }} — skipping API approval."
+  when: f5xc_reg_current_state | default('') == 'ONLINE'
+
+- name: Mark site as approved when already online
+  ansible.builtin.set_fact:
+    f5xc_site_approved: true
+  when: f5xc_reg_current_state | default('') == 'ONLINE'
+
+- name: Set registration poll variables
+  ansible.builtin.set_fact:
+    poll_max_attempts: "{{ (site_approval_timeout | int / f5xc_registration_poll_interval | int) | int }}"
+  when: f5xc_reg_name is not defined
+
+- name: Poll for pending (NEW) site registration
+  ansible.builtin.include_tasks: poll_new_registration.yml
+  loop: "{{ range(1, (poll_max_attempts | int) + 1) | list }}"
+  loop_control:
+    loop_var: poll_attempt
+  when:
+    - f5xc_reg_name is not defined or f5xc_reg_name | default('') | length == 0
+
+- name: Assert registration name was resolved
+  ansible.builtin.assert:
+    that:
+      - f5xc_reg_name is defined
+      - f5xc_reg_name | length > 0
+    fail_msg: >-
+      No registration found for site '{{ f5xc_cluster_name }}' within {{ site_approval_timeout }}s.
+      Confirm vp-manager is running and the site token matches the XC tenant.
+
+- name: Fetch registration detail before approval
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registrations/{{ f5xc_reg_name }}"
+    method: GET
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    status_code: 200
+  register: f5xc_reg_detail
+  when: f5xc_reg_current_state | default('') != 'ONLINE'
+
+- name: Refresh registration state
+  ansible.builtin.set_fact:
+    f5xc_reg_current_state: "{{ f5xc_reg_detail.json.object.status.current_state | default('') }}"
+  when:
+    - f5xc_reg_detail is not skipped
+    - f5xc_reg_detail is defined
+
+- name: Approve site registration via F5 XC API
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registration/{{ f5xc_reg_name }}/approve"
+    method: POST
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    body_format: json
+    body:
+      name: "{{ f5xc_reg_name }}"
+      state: APPROVED
+      passport:
+        cluster_name: "{{ f5xc_cluster_name }}"
+        cluster_size: "{{ f5xc_cluster_size | int }}"
+        cluster_type: "{{ f5xc_cluster_type }}"
+        latitude: "{{ f5xc_latitude | float }}"
+        longitude: "{{ f5xc_longitude | float }}"
+      tunnel_type: "{{ f5xc_tunnel_type }}"
+    status_code: 200
+  register: f5xc_approve_result
+  when: f5xc_reg_current_state | default('') in ['NEW', 'PENDING']
+
+- name: Display API approval result
+  ansible.builtin.debug:
+    msg: >-
+      Approved registration {{ f5xc_reg_name }} for site '{{ f5xc_cluster_name }}'
+      (state: {{ f5xc_approve_result.json.current_state | default('APPROVED') }}).
+  when: f5xc_approve_result is not skipped
+
+- name: Skip approve when registration does not need approval
+  ansible.builtin.debug:
+    msg: >-
+      Registration {{ f5xc_reg_name }} is '{{ f5xc_reg_current_state }}' — skipping approve POST.
+  when:
+    - f5xc_reg_current_state | default('') not in ['NEW', 'PENDING']
+    - f5xc_reg_current_state | default('') != 'ONLINE'
+
+- name: Poll until site registration is ONLINE
+  ansible.builtin.uri:
+    url: "{{ f5xc_console_base }}/api/register/namespaces/system/registrations/{{ f5xc_reg_name }}"
+    method: GET
+    headers: "{{ f5xc_api_headers }}"
+    follow_redirects: none
+    status_code: 200
+  register: f5xc_reg_status
+  until: f5xc_reg_status.json.object.status.current_state == 'ONLINE'
+  retries: "{{ (site_approval_timeout | int / f5xc_registration_poll_interval | int) | int }}"
+  delay: "{{ f5xc_registration_poll_interval | int }}"
+  when: f5xc_reg_current_state | default('') != 'ONLINE'
+
+- name: Display final registration state
+  ansible.builtin.debug:
+    msg: >-
+      Site '{{ f5xc_cluster_name }}' ({{ f5xc_reg_name }}) reached state
+      {{ f5xc_reg_status.json.object.status.current_state | default(f5xc_reg_current_state) }}.
+
+- name: Mark site as approved via API
+  ansible.builtin.set_fact:
+    f5xc_site_approved: true
