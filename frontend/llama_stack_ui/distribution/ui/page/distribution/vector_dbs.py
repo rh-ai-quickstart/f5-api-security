@@ -13,7 +13,7 @@ import traceback
 
 from llama_stack_ui.distribution.ui.modules.utils import get_vector_db_name, data_url_from_file
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
-from llama_stack_client import RAGDocument
+# RAGDocument removed in 0.6.1 - using new files API instead
 
 
 def vector_dbs():
@@ -56,7 +56,7 @@ def vector_dbs():
         st.session_state["creation_message"] = ""
     
     # Fetch all vector databases
-    vdb_list = llama_stack_api.client.vector_dbs.list()
+    vdb_list = llama_stack_api.client.vector_stores.list()
     
     # Build dropdown options based on whether databases exist
     dropdown_options = []
@@ -181,33 +181,18 @@ def _create_vector_database(vdb_name):
             return
             
         # Check for duplicate names
-        existing_vdbs = llama_stack_api.client.vector_dbs.list()
+        existing_vdbs = llama_stack_api.client.vector_stores.list()
         existing_names = [get_vector_db_name(vdb) for vdb in existing_vdbs]
         if vdb_name in existing_names:
             st.session_state["creation_status"] = "error"
             st.session_state["creation_message"] = f"Vector database '{vdb_name}' already exists. Please choose a different name."
             return
         
-        # Get vector IO provider
-        providers = llama_stack_api.client.providers.list()
-        vector_io_provider = None
-        for provider in providers:
-            if provider.api == "vector_io":
-                vector_io_provider = provider.provider_id
-                break
-                
-        if not vector_io_provider:
-            st.session_state["creation_status"] = "error"
-            st.session_state["creation_message"] = "No vector IO provider found. Cannot create vector database."
-            return
-        
-        # Create the vector database
+        # Create the vector database (new 0.6.1 API)
+        # Provider is automatically determined by the server
         with st.spinner(f"Creating vector database '{vdb_name}'..."):
-            vector_db = llama_stack_api.client.vector_dbs.register(
-                vector_db_id=vdb_name,
-                embedding_dimension=384,
-                embedding_model="all-MiniLM-L6-v2",
-                provider_id=vector_io_provider,
+            vector_db = llama_stack_api.client.vector_stores.create(
+                name=vdb_name
             )
             
         # Success
@@ -226,6 +211,7 @@ def _create_vector_database(vdb_name):
     except Exception as e:
         st.session_state["creation_status"] = "error"
         st.session_state["creation_message"] = f"Error creating vector database: {str(e)}"
+        st.rerun()
 
 
 def _show_document_upload_ui(vector_db_name, vector_db_obj=None):
@@ -280,7 +266,8 @@ def _show_document_upload_ui(vector_db_name, vector_db_obj=None):
             st.info(f"📤 Uploading {len(uploaded_files)} file(s): {', '.join([f.name for f in uploaded_files])}")
             
             # Get the correct database ID for upload
-            vector_db_id = vector_db_obj.identifier if vector_db_obj and hasattr(vector_db_obj, 'identifier') else vector_db_name
+            # Version-independent: try 'id' first (0.6.1), then 'identifier' (old), then fallback to name
+            vector_db_id = getattr(vector_db_obj, 'id', None) or getattr(vector_db_obj, 'identifier', None) or vector_db_name if vector_db_obj else vector_db_name
             
             # Upload automatically
             _upload_documents_to_database(vector_db_name, uploaded_files, vector_db_id)
@@ -304,25 +291,22 @@ def _upload_documents_to_database(vector_db_name, uploaded_files, vector_db_id=N
             st.session_state["upload_message"] = "No files selected for upload."
             return
         
-        # Convert uploaded files into RAGDocument instances
-        with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
-            documents = [
-                RAGDocument(
-                    document_id=uploaded_file.name,
-                    content=data_url_from_file(uploaded_file),
-                    metadata={"source": uploaded_file.name, "type": "uploaded_file"}  # LlamaStack maps 'source' to chunk_metadata.source
-                )
-                for uploaded_file in uploaded_files
-            ]
-        
-        # Insert documents into the existing vector database
+        # Upload files using new 0.6.1 API
         actual_db_id = vector_db_id or vector_db_name
-        with st.spinner(f"Uploading documents to '{vector_db_name}'..."):
-            llama_stack_api.client.tool_runtime.rag_tool.insert(
-                vector_db_id=actual_db_id,  # Use the correct database ID
-                documents=documents,
-                chunk_size_in_tokens=512,
-            )
+        with st.spinner(f"Uploading {len(uploaded_files)} file(s) to '{vector_db_name}'..."):
+            for uploaded_file in uploaded_files:
+                # Step 1: Upload file content to get file_id
+                file_obj = llama_stack_api.client.files.create(
+                    file=uploaded_file,
+                    purpose='assistants'
+                )
+
+                # Step 2: Add file to vector store (chunking handled server-side)
+                llama_stack_api.client.vector_stores.files.create(
+                    vector_store_id=actual_db_id,
+                    file_id=file_obj.id,
+                    attributes={"source": uploaded_file.name}
+                )
         
         # Success
         st.session_state["upload_status"] = "success"
@@ -494,11 +478,9 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
         vector_db_obj: The actual vector database object with identifier
     """
     try:
-        # Get the correct vector database ID
-        if vector_db_obj and hasattr(vector_db_obj, 'identifier'):
-            vector_db_id = vector_db_obj.identifier
-        else:
-            vector_db_id = vector_db_name  # Fallback to display name
+        # Get the correct vector database ID (version-independent)
+        # Try 'id' first (0.6.1), then 'identifier' (old), then fallback to name
+        vector_db_id = getattr(vector_db_obj, 'id', None) or getattr(vector_db_obj, 'identifier', None) or vector_db_name if vector_db_obj else vector_db_name
         
         # Initialize session state for deletion status
         if "delete_status" not in st.session_state:
@@ -569,10 +551,16 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
             else:
                 # Fallback: Try a simple query to see if documents exist
                 try:
-                    rag_response = llama_stack_api.client.tool_runtime.rag_tool.query(
-                        content="document",
-                        vector_db_ids=[vector_db_id]
+                    # Use new vector_stores.search API
+                    search_result = llama_stack_api.client.vector_stores.search(
+                        vector_store_id=vector_db_id,
+                        query="document",
+                        max_num_results=5
                     )
+                    # Extract content from chunks
+                    rag_response = type('obj', (object,), {
+                        'content': '\n'.join([chunk.content for chunk in search_result.chunks]) if hasattr(search_result, 'chunks') and search_result.chunks else ""
+                    })()
                     
                     # Check if we got content back (indicates documents exist)
                     has_content = hasattr(rag_response, 'content') and rag_response.content and len(str(rag_response.content).strip()) > 0
@@ -614,10 +602,16 @@ def _show_existing_documents_table(vector_db_name, vector_db_obj=None):
                         
                         if test_query:
                             try:
-                                test_response = llama_stack_api.client.tool_runtime.rag_tool.query(
-                                    content=test_query,
-                                    vector_db_ids=[vector_db_id]
+                                # Use new vector_stores.search API
+                                search_result = llama_stack_api.client.vector_stores.search(
+                                    vector_store_id=vector_db_id,
+                                    query=test_query,
+                                    max_num_results=5
                                 )
+                                # Extract content from chunks
+                                test_response = type('obj', (object,), {
+                                    'content': '\n'.join([chunk.content for chunk in search_result.chunks]) if hasattr(search_result, 'chunks') and search_result.chunks else ""
+                                })()
                                 
                                 if test_response.content:
                                     st.success(f"✅ Found relevant content ({len(test_response.content)} characters)")

@@ -44,13 +44,13 @@ class LlamaStackApi:
             
             # Create client with custom URL
             client = self.create_client_with_url(url)
-            
+
             # Try to fetch models - this will fail if not a LlamaStack endpoint
-            models = client.models.list()
-            
+            models = list(client.models.list())
+
             if not models:
-                return False, None, "XC URL must be a LlamaStack endpoint"
-            
+                return False, None, "No models available from this endpoint"
+
             return True, models, None
             
         except requests.exceptions.ConnectionError:

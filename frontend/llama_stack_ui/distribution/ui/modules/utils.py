@@ -60,15 +60,16 @@ def data_url_from_file(file) -> str:
 def get_vector_db_name(vector_db):
     """
     Get the display name for a vector database.
-    Falls back to identifier if vector_db_name attribute is not present.
-    
+    Falls back to name/id/identifier depending on API version.
+
     Args:
         vector_db: Vector database object from API
-    
+
     Returns:
         str: The vector database name
     """
-    return getattr(vector_db, 'vector_db_name', vector_db.identifier)
+    # Try vector_db_name first (old custom field), then name (0.6.1), then id (0.6.1), then identifier (old)
+    return getattr(vector_db, 'vector_db_name', None) or getattr(vector_db, 'name', None) or getattr(vector_db, 'id', None) or getattr(vector_db, 'identifier', 'unknown')
 
 
 def get_question_suggestions():
