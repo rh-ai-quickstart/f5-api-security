@@ -111,27 +111,40 @@ def models():
     elif not models_list:
         # Fallback to default endpoint for backward compatibility
         try:
-            models_list = llama_stack_api.client.models.list()
+            models_list = list(llama_stack_api.client.models.list())
             if models_list:
                 st.info("Using default endpoint. Configure XC URL above to use a different LlamaStack instance.")
         except Exception:
             st.info("No models available. Please configure a valid XC URL.")
             return
-    
+
     if not models_list:
-        st.info("No models available.")
+        st.info("No LLM models available from this endpoint.")
         return
 
+    # Version-independent helper to get model type
+    def _get_model_type(model):
+        for attr in ("model_type", "api_model_type"):
+            val = getattr(model, attr, None)
+            if val is not None:
+                return val
+        meta = getattr(model, "custom_metadata", None) or {}
+        return meta.get("model_type")
+
+    # Version-independent helper to get model ID
+    def _get_model_id(model):
+        return getattr(model, "identifier", None) or getattr(model, "id", "unknown")
+
     # Filter models to only include LLM models (exclude embedding models, etc.)
-    llm_models = [model for model in models_list if hasattr(model, 'api_model_type') and model.api_model_type == "llm"]
-    
+    llm_models = [model for model in models_list if _get_model_type(model) == "llm"]
+
     if not llm_models:
         st.info("No LLM models available from this endpoint.")
         return
 
     # Display models in a table with single column
     # Create DataFrame with model identifiers
-    models_data = [{"Model Identifier": model.identifier} for model in llm_models]
+    models_data = [{"Model Identifier": _get_model_id(model)} for model in llm_models]
     df = pd.DataFrame(models_data)
     
     # Add row numbering starting from 1

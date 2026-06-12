@@ -4,34 +4,18 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
-import enum
 import json
 import uuid
-from itertools import tee
+import logging
 
 import streamlit as st
-from llama_stack_client.lib.agents.agent import Agent
-from llama_stack_client.lib.agents.event_logger import  EventLogger
-from llama_stack_client.lib.agents.react.agent import ReActAgent
-from llama_stack_client.lib.agents.react.tool_parser import ReActOutput
-from llama_stack.apis.common.content_types import ToolCallDelta
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
-from llama_stack_ui.distribution.ui.modules.utils import get_suggestions_for_databases, get_vector_db_name
-from llama_stack_client.types import UserMessage
-from llama_stack_client.types.shared_params import SamplingParams
-from llama_stack_client.types.shared_params.response_format import JsonSchemaResponseFormat
-from llama_stack_client.types.shared_params.sampling_params import StrategyTopPSamplingStrategy
+from llama_stack_ui.distribution.ui.modules.utils import (
+    get_suggestions_for_databases,
+    get_vector_db_name,
+)
 
-
-class AgentType(enum.Enum):
-    REGULAR = "Regular"
-    REACT = "ReAct"
-
-def get_strategy(temperature, top_p):
-    """Determines the sampling strategy for the LLM based on temperature."""
-    return {'type': 'greedy'} if temperature == 0 else {
-            'type': 'top_p', 'temperature': temperature, 'top_p': top_p
-        }
+logger = logging.getLogger(__name__)
 
 
 def render_history(tool_debug):
@@ -89,19 +73,31 @@ def tool_chat_page():
     st.title("💬 Chat")
 
     # Get models from XC URL if configured, otherwise use default endpoint
+    def _get_model_type(model):
+        """Version-independent model type getter"""
+        for attr in ("model_type", "api_model_type"):
+            val = getattr(model, attr, None)
+            if val is not None:
+                return val
+        meta = getattr(model, "custom_metadata", None) or {}
+        return meta.get("model_type")
+
+    def _get_model_id(model):
+        """Version-independent model ID getter"""
+        return getattr(model, "identifier", None) or model.id
+
     def get_available_models():
         # Check if XC URL is configured in session state
         if "xc_url" in st.session_state and "models_list" in st.session_state and st.session_state["models_list"]:
             # Use models from XC URL (same as Models tab)
             models_list = st.session_state["models_list"]
             # Filter to only LLM models
-            llm_models = [model for model in models_list if hasattr(model, 'api_model_type') and model.api_model_type == "llm"]
-            return [model.identifier for model in llm_models]
+            return [_get_model_id(model) for model in models_list if _get_model_type(model) == "llm"]
         else:
             # Fallback to default endpoint
             client = llama_stack_api.client
             models = client.models.list()
-            return [model.identifier for model in models if model.api_model_type == "llm"]
+            return [_get_model_id(model) for model in models if _get_model_type(model) == "llm"]
     
     model_list = get_available_models()
 
@@ -130,15 +126,12 @@ def tool_chat_page():
         st.subheader("Model")
         model = st.selectbox(label="Model", options=model_list, on_change=reset_agent, label_visibility="collapsed")
 
-        ## Hardcoded to Direct mode with RAG always enabled
+        # Hardcoded to Direct mode
         processing_mode = "Direct"
-        
-        # RAG is always enabled in Direct mode - no user selection needed
-        toolgroup_selection = ["builtin::rag"]
-        
+
         # Document Collections selection - single, clean selector
         # Always fetch vector DBs from local endpoint (pgvector is local, not on XC)
-        vector_dbs = llama_stack_api.client.vector_dbs.list() or []
+        vector_dbs = llama_stack_api.client.vector_stores.list() or []
         if not vector_dbs:
             st.info("No vector databases available for selection.")
         vector_db_names = [get_vector_db_name(vector_db) for vector_db in vector_dbs]
@@ -214,48 +207,6 @@ def tool_chat_page():
             st.rerun()
     
 
-    updated_toolgroup_selection = []
-    @st.cache_resource
-    def create_agent():
-        if "agent_type" in st.session_state and st.session_state.agent_type == AgentType.REACT:
-            return ReActAgent(
-                client=client,
-                model=model,
-                tools=updated_toolgroup_selection,
-                response_format=JsonSchemaResponseFormat(
-                    type="json_schema",
-                    json_schema=ReActOutput.model_json_schema()
-                ),
-                sampling_params=SamplingParams(
-                    strategy=StrategyTopPSamplingStrategy(type="top_p", temperature=temperature, top_p=top_p),
-                    max_tokens=max_tokens,
-                    repetition_penalty=repetition_penalty,
-                ),
-                input_shields= input_shields,
-                output_shields= output_shields,
-            )
-        else:
-            updated_system_prompt = system_prompt.strip()
-            updated_system_prompt = updated_system_prompt if updated_system_prompt.strip().endswith('.') else updated_system_prompt + '.'
-            return Agent(
-                client,
-                model=model,
-                instructions=f"{updated_system_prompt} When you use a tool always respond with a summary of the result.",
-                tools=updated_toolgroup_selection,
-                sampling_params=SamplingParams(
-                    strategy=StrategyTopPSamplingStrategy(type="top_p", temperature=temperature, top_p=top_p),
-                    max_tokens=max_tokens,
-                    repetition_penalty=repetition_penalty,
-                ),
-                input_shields= input_shields,
-                output_shields= output_shields,
-            )
-
-        if "agent_session_id" not in st.session_state:
-            st.session_state["agent_session_id"] = agent.create_session(session_name=f"tool_demo_{uuid.uuid4()}")
-
-        session_id = st.session_state["agent_session_id"]
-
     if "messages" not in st.session_state:
         st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "stop_reason": "end_of_turn"}]
     
@@ -276,7 +227,7 @@ def tool_chat_page():
         if not selected_vector_dbs:
             return
         
-        vector_dbs = llama_stack_api.client.vector_dbs.list() or []
+        vector_dbs = llama_stack_api.client.vector_stores.list() or []
         suggestions = get_suggestions_for_databases(selected_vector_dbs, vector_dbs)
         
         if not suggestions:
@@ -508,87 +459,140 @@ def tool_chat_page():
                 debug_events_list.append({"type": "tool_log", "content": log_entry.content})
             # Add other log types as needed for debugging
 
-    def agent_process_prompt(prompt, debug_events_list):
-        print(f"In agent_process_prompt: {prompt}")
-        # Send the prompt to the agent
-        turn_response = agent.create_turn(
-            session_id=session_id,
-            messages=[UserMessage(role="user", content=prompt)],
-            stream=True,
-        )
-        print(f"In agent_process_prompt: {turn_response}")
-        response_content = st.write_stream(response_generator(turn_response, debug_events_list))
-        print(f"In agent_process_prompt: {response_content}")
-        st.session_state.messages.append({"role": "assistant", "content": response_content})
-
-
     def direct_process_prompt(prompt, debug_events_list, inference_client):
-        # Query the vector DB
+        """
+        Direct mode: Manual RAG with OpenAI-compatible chat.completions API.
+        Migrated to use client.chat.completions.create() and client.vector_stores.search()
+        """
+        # Step 1: Search vector stores for context (if selected)
+        prompt_context = None
+        rag_status_message = ""
+
         if selected_vector_dbs:
-            vector_dbs = client.vector_dbs.list() or []
-            vector_db_ids = [vector_db.identifier for vector_db in vector_dbs if get_vector_db_name(vector_db) in selected_vector_dbs]
-            with st.spinner("Retrieving context (RAG)..."):
-                try:
-                    rag_response = client.tool_runtime.rag_tool.query(
-                        content=prompt, vector_db_ids=list(vector_db_ids)
-                    )
-                    prompt_context = rag_response.content
-                    debug_events_list.append({
-                        "type": "rag_query_direct_mode", "query": prompt,
-                        "vector_dbs": selected_vector_dbs,
-                        "context_length": len(prompt_context) if prompt_context else 0,
-                        "context_preview": (str(prompt_context[:200]) + "..." if prompt_context else "None")
-                    })
-                except Exception as e:
-                    st.warning(f"RAG Error (Direct Mode): {e}")
-                    debug_events_list.append({"type": "error", "source": "rag_direct_mode", "content": str(e)})
+            # Always use local endpoint for vector DBs (pgvector is local, not on XC)
+            vector_dbs = list(llama_stack_api.client.vector_stores.list()) or []
+            vector_db_ids = [
+                vector_db.id for vector_db in vector_dbs
+                if get_vector_db_name(vector_db) in selected_vector_dbs
+            ]
+
+            if not vector_db_ids:
+                rag_status_message = f"⚠️ Selected vector database(s) not found: {', '.join(selected_vector_dbs)}"
+            elif vector_db_ids:
+                with st.spinner("Retrieving context (RAG)..."):
+                    try:
+                        # Use new vector_stores.search API
+                        search_results = []
+                        for vector_db_id in vector_db_ids:
+                            # Always use local client for vector store search (pgvector is local)
+                            result = llama_stack_api.client.vector_stores.search(
+                                vector_store_id=vector_db_id,
+                                query=prompt,
+                                max_num_results=5  # top_k equivalent
+                            )
+                            if hasattr(result, 'data') and result.data:
+                                search_results.extend(result.data)
+                            elif result and hasattr(result, 'chunks'):
+                                search_results.extend(result.chunks)
+
+                        # Combine search results into context
+                        if search_results:
+                            context_parts = []
+                            for chunk in search_results:
+                                if hasattr(chunk, 'content') and chunk.content:
+                                    # Content is an array of objects like [{"type":"text","text":"..."}]
+                                    if isinstance(chunk.content, list):
+                                        for content_item in chunk.content:
+                                            if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                                                context_parts.append(content_item.get('text', ''))
+                                            elif hasattr(content_item, 'type') and content_item.type == 'text':
+                                                context_parts.append(getattr(content_item, 'text', ''))
+                                    else:
+                                        # Fallback: treat as string
+                                        context_parts.append(str(chunk.content))
+                            prompt_context = "\n\n".join(context_parts) if context_parts else None
+                            if prompt_context:
+                                rag_status_message = f"✅ Using RAG: Retrieved {len(search_results)} chunks ({len(prompt_context)} characters) from {len(vector_db_ids)} vector database(s)"
+                            else:
+                                rag_status_message = f"⚠️ Retrieved {len(search_results)} chunks but failed to extract text content"
+                        else:
+                            rag_status_message = f"⚠️ RAG query returned no results from vector database(s): {', '.join(selected_vector_dbs)}"
+
+                        debug_events_list.append({
+                            "type": "rag_query_direct_mode",
+                            "query": prompt,
+                            "vector_dbs": selected_vector_dbs,
+                            "context_length": len(prompt_context) if prompt_context else 0,
+                            "context_preview": (str(prompt_context[:200]) + "..." if prompt_context else "None")
+                        })
+                    except Exception as e:
+                        rag_status_message = f"❌ RAG Error: {e}"
+                        debug_events_list.append({
+                            "type": "error",
+                            "source": "rag_direct_mode",
+                            "content": str(e)
+                        })
         else:
-            prompt_context = None
-        
+            rag_status_message = "ℹ️ No vector databases selected - RAG is disabled"
+
+        # Step 2: Build messages with context
         with st.chat_message("assistant"):
+            # Show RAG status at the top of the response
+            if rag_status_message:
+                st.caption(rag_status_message)
+
             message_placeholder = st.empty()
             full_response = ""
-            retrieval_response = ""
 
-            # Construct the extended prompt
+            # Construct the enhanced prompt
             if prompt_context:
-                extended_prompt = f"Please answer the following query using the context below.\n\nCONTEXT:\n{prompt_context}\n\nQUERY:\n{prompt}"
+                user_content = f"Please answer the following query using the context below.\n\nCONTEXT:\n{prompt_context}\n\nQUERY:\n{prompt}"
             else:
-                extended_prompt = f"Please answer the following query. \n\nQUERY:\n{prompt}"
+                user_content = prompt
 
-            # Run inference directly using the configured client (XC URL or default)
-            #st.session_state.messages.append({"role": "user", "content": extended_prompt})
-            messages_for_direct_api = (
-                [{'role': 'system', 'content': system_prompt}] +
-                [{'role': 'user', 'content': extended_prompt}]
-            )
-            response = inference_client.inference.chat_completion(
-                messages=messages_for_direct_api,
-                model_id=model,
-                sampling_params={
-                    "strategy": get_strategy(temperature, top_p),
-                    "max_tokens": max_tokens,
-                    "repetition_penalty": repetition_penalty,
-                },
-                stream=True,
-                timeout=120,
-            )
+            messages = [
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_content}
+            ]
 
-            # Display assistant response
-            for chunk in response:
-                if chunk.event:
-                    response_delta = chunk.event.delta
-                    if isinstance(response_delta, ToolCallDelta):
-                        retrieval_response += response_delta.tool_call.replace("====", "").strip()
-                        #retrieval_message_placeholder.info(retrieval_response)
-                    else:
-                        full_response += chunk.event.delta.text
-                        message_placeholder.markdown(full_response + "▌")
-            message_placeholder.markdown(full_response)
+            # Step 3: Call OpenAI-compatible chat.completions API
+            try:
+                response = inference_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                )
 
-        response_dict = {"role": "assistant", "content": full_response, "stop_reason": "end_of_message"}
+                # Step 4: Stream response
+                for chunk in response:
+                    if hasattr(chunk, 'choices') and chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if hasattr(delta, 'content') and delta.content:
+                            full_response += delta.content
+                            message_placeholder.markdown(full_response + "▌")
+
+                # Final update without cursor
+                message_placeholder.markdown(full_response)
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                logger.error("chat.completions.create() error: %s", e)
+                debug_events_list.append({
+                    "type": "error",
+                    "source": "chat_completion",
+                    "content": str(e)
+                })
+                return
+
+        # Step 5: Save to session
+        response_dict = {
+            "role": "assistant",
+            "content": full_response,
+            "stop_reason": "end_of_message"
+        }
         st.session_state.messages.append(response_dict)
-        #st.session_state.displayed_messages.append(response_dict)
 
     def process_prompt(prompt):
         print(f"In process_prompt: {prompt}")
