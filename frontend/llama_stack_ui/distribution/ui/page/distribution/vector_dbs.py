@@ -13,6 +13,11 @@ import traceback
 
 from llama_stack_ui.distribution.ui.modules.utils import get_vector_db_name, data_url_from_file
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
+from llama_stack_ui.distribution.ui.modules.local_extractors import (
+    extract_text,
+    create_text_file_from_extracted_content,
+    LOCAL_SUPPORTED_EXTENSIONS,
+)
 # RAGDocument removed in 0.6.1 - using new files API instead
 
 
@@ -295,9 +300,22 @@ def _upload_documents_to_database(vector_db_name, uploaded_files, vector_db_id=N
         actual_db_id = vector_db_id or vector_db_name
         with st.spinner(f"Uploading {len(uploaded_files)} file(s) to '{vector_db_name}'..."):
             for uploaded_file in uploaded_files:
+                original_filename = uploaded_file.name
+                file_ext = os.path.splitext(original_filename)[1].lower()
+
+                # Auto-detect DOCX and extract locally, let server handle PDF/TXT
+                if file_ext in LOCAL_SUPPORTED_EXTENSIONS:
+                    st.caption(f"📄 Extracting text from {original_filename}...")
+                    text_content = extract_text(uploaded_file, original_filename)
+                    file_to_upload = create_text_file_from_extracted_content(
+                        text_content, original_filename
+                    )
+                else:
+                    file_to_upload = uploaded_file
+
                 # Step 1: Upload file content to get file_id
                 file_obj = llama_stack_api.client.files.create(
-                    file=uploaded_file,
+                    file=file_to_upload,
                     purpose='assistants'
                 )
 
@@ -305,7 +323,7 @@ def _upload_documents_to_database(vector_db_name, uploaded_files, vector_db_id=N
                 llama_stack_api.client.vector_stores.files.create(
                     vector_store_id=actual_db_id,
                     file_id=file_obj.id,
-                    attributes={"source": uploaded_file.name}
+                    attributes={"source": original_filename}
                 )
         
         # Success
