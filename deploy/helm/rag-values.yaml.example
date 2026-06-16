@@ -141,6 +141,17 @@ global:
     #     operator: Exists
     #     effect: NoSchedule
 
+    # Example Xeon configurations:
+    # llama-3-2-3b-instruct:
+    #   id: meta-llama/Llama-3.2-3B-Instruct
+    #   enabled: true
+    #   device: "xeon"
+    #   args:
+    #   - --max-model-len
+    #   - "14336"
+    #   - --max-num-seqs
+    #   - "32"
+
 # Database Configuration (pgvector)
 pgvector:
   secret:
@@ -153,7 +164,7 @@ pgvector:
 # Llama Stack Configuration
 llama-stack:
   image:
-    tag: 0.2.23  # Match frontend client version
+    tag: 0.6.1
 
 # Suggested Questions Configuration (Optional)
 # These questions appear in the chat UI when users select a database
