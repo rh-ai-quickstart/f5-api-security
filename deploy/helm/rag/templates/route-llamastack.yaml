@@ -1,0 +1,10 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: llamastack
+spec:
+  to:
+    kind: Service
+    name: llamastack
+  port:
+    targetPort: http
