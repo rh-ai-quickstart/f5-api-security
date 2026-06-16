@@ -95,8 +95,8 @@ The solution is built on:
 | Function   | Model Name                             | Hardware    | AWS example      |
 |-----------|----------------------------------------|-------------|------------------|
 | Embedding | `all-MiniLM-L6-v2`                     | CPU/GPU/HPU | —                |
-| Generation| `meta-llama/Llama-3.2-3B-Instruct`     | L4/HPU      | g6.2xlarge       |
-| Generation| `meta-llama/Llama-3.1-8B-Instruct`     | L4/HPU      | g6.2xlarge       |
+| Generation| `meta-llama/Llama-3.2-3B-Instruct`     | L4/HPU/XEON | g6.2xlarge       |
+| Generation| `meta-llama/Llama-3.1-8B-Instruct`     | L4/HPU/XEON | g6.2xlarge       |
 | Generation| `meta-llama/Meta-Llama-3-70B-Instruct` | A100 x2/HPU | p4d.24xlarge     |
 | Safety    | `meta-llama/Llama-Guard-3-8B`          | L4/HPU      | g6.2xlarge       |
 
@@ -170,6 +170,25 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
    > **Tip:** You can combine both options—for example, run the embedding model locally while pointing the generation model at a remote server.
 
    ---
+   #### Option C: Deploy models locally using Intel Xeon processors
+   Best when you have Intel Xeon nodes on your cluster and want to run models entirely on-premises.
+
+   In `rag-values.yaml`, enable one or more local models by setting `enabled: true`:
+
+   ```yaml
+   global:
+     models:
+       llama-3-2-3b-instruct:
+        id: meta-llama/Llama-3.2-3B-Instruct
+        enabled: true
+        device: "xeon"
+        args:
+        - --max-model-len
+        - "14336"
+        - --max-num-seqs
+        - "32"
+   ```
+   ---
 
    Once your values file is ready, deploy:
    ```bash
@@ -181,20 +200,20 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
    [SUCCESS] rag installed successfully
    ```
 
-4. **Verify (optional)**  
+5. **Verify (optional)**  
    List models:
    ```bash
    curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/models
    ```
    Test chat (LlamaStack):
    ```bash
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/openai/v1/chat/completions \
+   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/chat/completions \
      -H "Content-Type: application/json" \
      -d '{"model": "<MODEL_ID>", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 64, "temperature": 0}' | jq
    ```
    For the secured vLLM endpoint, use your route and model ID in the same request format.
 
-5. **Deploy F5 Distributed Cloud Customer Edge**
+6. **Deploy F5 Distributed Cloud Customer Edge**
 
    This step deploys the F5 XC CE mesh onto the OpenShift cluster. It configures HugePages, validates storage, applies the CE manifest, and waits for all pods to register and become healthy.
 
@@ -214,7 +233,7 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
 
    To approve manually in the Console instead, set `f5xc_auto_approve: false` in `deploy/ansible/group_vars/all/vars.yml`. The playbook will display a banner and poll until approval is detected.
 
-6. **Next steps**
+7. **Next steps**
    - [Security Use Cases and Testing](docs/securing_model_inference_use_cases.md)
 
 **Application access:** Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure LLM settings (XC URL, model ID, API key) in the web UI.
