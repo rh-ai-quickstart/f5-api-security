@@ -151,6 +151,16 @@ global:
     #   - "14336"
     #   - --max-num-seqs
     #   - "32"
+    #
+    # llama-3-1-8b-instruct:
+    #   id: meta-llama/Llama-3.1-8B-Instruct
+    #   enabled: true
+    #   device: "xeon"
+    #   args:
+    #   - --max-model-len
+    #   - "14336"
+    #   - --max-num-seqs
+    #   - "32"
 
 # Database Configuration (pgvector)
 pgvector:
