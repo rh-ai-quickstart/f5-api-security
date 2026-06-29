@@ -225,7 +225,7 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
    ```
    For the secured vLLM endpoint, use your route and model ID in the same request format.
 
-6. **Deploy F5 Distributed Cloud Customer Edge**
+5. **Deploy F5 Distributed Cloud Customer Edge**
 
    This step deploys the F5 XC CE mesh onto the OpenShift cluster. It configures HugePages, validates storage, applies the CE manifest, and waits for all pods to register and become healthy.
 
@@ -245,7 +245,7 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
 
    To approve manually in the Console instead, set `f5xc_auto_approve: false` in `deploy/ansible/group_vars/all/vars.yml`. The playbook will display a banner and poll until approval is detected.
 
-7. **Next steps**
+6. **Next steps**
    - [Security Use Cases and Testing](docs/securing_model_inference_use_cases.md)
 
 **Application access:** Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure LLM settings (XC URL, model ID, API key) in the web UI.
