@@ -200,20 +200,32 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
    [SUCCESS] rag installed successfully
    ```
 
-4. **Verify (optional)**  
+4. **Verify (optional)**:
+   
+   This step uses port-forwarding to locally validate the LlamaStack service
+
+   Port-forward the LlamaStack service:
+   ```bash
+   oc port-forward svc/llamastack 8321:8321
+   ```
+   
    List models:
    ```bash
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/models
+   curl -sS http://localhost:8321/v1/models
    ```
+   Expected result: a JSON response containing one or more model IDs.
+   
    Test chat (LlamaStack):
+
+   Replace <MODEL_ID> with a model ID returned by the previous command.
    ```bash
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/chat/completions \
+   curl -sS http://localhost:8321/v1/chat/completions \
      -H "Content-Type: application/json" \
      -d '{"model": "<MODEL_ID>", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 64, "temperature": 0}' | jq
    ```
    For the secured vLLM endpoint, use your route and model ID in the same request format.
 
-5. **Deploy F5 Distributed Cloud Customer Edge**
+6. **Deploy F5 Distributed Cloud Customer Edge**
 
    This step deploys the F5 XC CE mesh onto the OpenShift cluster. It configures HugePages, validates storage, applies the CE manifest, and waits for all pods to register and become healthy.
 
@@ -233,7 +245,7 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
 
    To approve manually in the Console instead, set `f5xc_auto_approve: false` in `deploy/ansible/group_vars/all/vars.yml`. The playbook will display a banner and poll until approval is detected.
 
-6. **Next steps**
+7. **Next steps**
    - [Security Use Cases and Testing](docs/securing_model_inference_use_cases.md)
 
 **Application access:** Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure LLM settings (XC URL, model ID, API key) in the web UI.
