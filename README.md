@@ -309,4 +309,4 @@ Navigate to **Settings → Vector Databases** to create vector databases and upl
 - **Title:** Secure model inference with F5 Distributed Cloud API Security
 - **Industry:** Banking and securities
 - **Product:** OpenShift AI, OpenShift
-- **Contributor org:** F5 / Red Hat
+- **Partner:** F5
