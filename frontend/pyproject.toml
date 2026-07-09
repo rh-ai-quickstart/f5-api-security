@@ -16,6 +16,7 @@ dependencies = [
     "llama-stack==__LLAMASTACK_VERSION__",
     "fire",
     "asyncpg",
+    "python-docx",
 ]
 
 [tool.setuptools]
